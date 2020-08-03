@@ -1,26 +1,25 @@
 library(base)
 library(curl)
 library(downloader)
+library(dplyr)
 library(lubridate)
 library(parallel)
 library(HelpersMG)
 library(tidyquant)
 library(data.table)
 
-top_pct <- unlist(fread(file="top_pct.csv"))
-bottom_pct <- unlist(fread(file="bottom_pct.csv"))
 adjusted_pvt_returns <- readRDS(file= 'adjusted_pvt_returns.RData')
 adjusted <- readRDS(file= 'adjusted.RData')
 outliers <- unlist(fread(file="outliers.csv"))
 totalReturns <- fread(file="totalReturns.csv")
+
 adjusted_pvt <- readRDS(file="adjusted_pvt.RData")
 
 #max_plots <- length(top_pct)
 
 ui <- fluidPage(pageWithSidebar(
   
-  headerPanel("Top/Bottom Performing Stocks of Sample of 400"),
-  
+  headerPanel("EOD Top/Bottom Stocks Dividend/Split Adj TCR w BBands/RSI, n=400"),
   
   sidebarPanel(
     textOutput("text0"),
@@ -31,6 +30,9 @@ ui <- fluidPage(pageWithSidebar(
     textOutput("text3"),
     textOutput("text4"),
     textOutput("text5"),
+    textOutput("text6"),
+    textOutput("text7"),
+    textOutput("text8"),
     plotOutput("hist")
     
   ),
@@ -41,7 +43,7 @@ ui <- fluidPage(pageWithSidebar(
     fluidRow(
       splitLayout(cellWidths = c("50%", "50%"), plotOutput("cumulativePlot1",height = 400, width = 600), plotOutput("cumulativePlot2",height = 400, width = 600))
     ),
-
+    
     fluidRow(
       splitLayout(cellWidths = c("50%", "50%"), uiOutput("plots1"), uiOutput("plots2"))
     )
@@ -51,22 +53,27 @@ ui <- fluidPage(pageWithSidebar(
 
 server <- function(input, output, session) {
   
-  #bottomTop10pct <- 
-  
-  totalReturns_noIndex <- dplyr::select(totalReturns, -c("X.SP500TR"))
+  sorted <- data.frame(t(t(totalReturns)[order(-t(totalReturns)), , drop = FALSE]))
+  totalReturns_noIndex <- dplyr::select(sorted, -c("X.SP500TR"))
   
   top_pct_1 <- reactive({
     unlist(quantile(totalReturns_noIndex,probs=c((1-input$pct))))
   })
   
-  top_pct_names <- reactive({colnames(totalReturns_noIndex)[c(totalReturns_noIndex[,which(totalReturns_noIndex>=top_pct_1())])]})
+  top_pct_names <- reactive({
+    #colnames(totalReturns_noIndex)[c(totalReturns_noIndex[,which(totalReturns_noIndex>=top_pct_1())])]
+    colnames(totalReturns_noIndex[,which(totalReturns_noIndex>=top_pct_1())])
+  })
   
   #have to unlist it
   bottom_pct_1 <- reactive({
     unlist(quantile(totalReturns_noIndex,probs=c(input$pct)))
   })
   
-  bottom_pct_names <- reactive({colnames(totalReturns_noIndex)[c(totalReturns_noIndex[,which(totalReturns_noIndex<=bottom_pct_1())])]})
+  bottom_pct_names <- reactive({
+    #colnames(totalReturns_noIndex)[c(totalReturns_noIndex[,which(totalReturns_noIndex<=bottom_pct_1())])]
+    colnames(totalReturns_noIndex[,which(totalReturns_noIndex<=bottom_pct_1())])
+  })
   
   numberStocks <- reactive({
     length(totalReturns_noIndex[,which(totalReturns_noIndex<=bottom_pct_1())])
@@ -108,6 +115,25 @@ server <- function(input, output, session) {
     
   })
   
+  output$text6 <- renderText({
+    
+    "Top/Bottom Thresholds"
+    
+  })
+  
+  output$text7 <- renderText({
+    
+    unlist(bottom_pct_1())
+    
+  })
+  
+  output$text8 <- renderText({
+    
+    unlist(top_pct_1())
+    
+  })
+  
+  
   output$hist <- renderPlot({
     
     hist(unlist(totalReturns_noIndex),main="Histogram of Total Cumulative Returns")
@@ -118,8 +144,8 @@ server <- function(input, output, session) {
     if(is.null(numberStocks))
     {return(NULL)}
     renderUI({
-    sliderInput("n", "Number of plots", value=4, min=1, max=numberStocks(), round=TRUE)
-  })
+      sliderInput("n", "Number of plots", value=4, min=1, max=numberStocks(), round=TRUE)
+    })
   })
   
   #https://deanattali.com/blog/building-shiny-apps-tutorial/#11-using-uioutput-to-create-ui-elements-dynamically
@@ -190,35 +216,35 @@ server <- function(input, output, session) {
     {return(NULL)}
     max_plots=numberStocks()
     #print(numberStocks())
-  for (i in 1:max_plots) {
-    # Need local so that each item gets its own number. Without it, the value
-    # of i in the renderPlot() will be the same across all instances, because
-    # of when the expression is evaluated.
-    
-    local({
-      my_i <- i
-      plotname1 <- paste("plot1", my_i, sep="")
+    for (i in 1:max_plots) {
+      # Need local so that each item gets its own number. Without it, the value
+      # of i in the renderPlot() will be the same across all instances, because
+      # of when the expression is evaluated.
       
-      chartName <- top_pct_names()[[i]]
-      
-      #x <- adjusted[[i]][,]
-      
-      x <- plotSet1()[[i]][,c("Date","Open","High","Low","Close","Volume","Adjusted")]
-      
-      output[[plotname1]] <- renderPlot({
-        #print(names(plotSet[i]))
-        #x <- plotSet1[[1]][,c("Date","Open","High","Low","Close","Volume","Adjusted")]
+      local({
+        my_i <- i
+        plotname1 <- paste("plot1", my_i, sep="")
         
-        temp <- as.data.table(x)
-        rownames(temp) <- temp$Date
-        temp <- as.xts(temp)
+        chartName <- top_pct_names()[[i]]
         
-        quantmod::chartSeries(temp, type="candlestick",subset=NULL,up.col = "black", dn.col = "red", name=chartName, theme = "white",TA=c(addRSI(n=14,maType="EMA"),addMACD(fast=12,slow=26,signal=9,type='EMA',histogram = TRUE),addBBands(n = 20, sd = 2, maType = "SMA", draw = 'bands', on = -1)))
+        #x <- adjusted[[i]][,]
+        
+        x <- plotSet1()[[i]][,c("Date","Open","High","Low","Close","Volume","Adjusted")]
+        
+        output[[plotname1]] <- renderPlot({
+          #print(names(plotSet[i]))
+          #x <- plotSet1[[1]][,c("Date","Open","High","Low","Close","Volume","Adjusted")]
+          
+          temp <- as.data.table(x)
+          rownames(temp) <- temp$Date
+          temp <- as.xts(temp)
+          
+          quantmod::chartSeries(temp, type="candlestick",subset=NULL,up.col = "black", dn.col = "red", name=chartName, theme = "white",TA=c(addRSI(n=14,maType="EMA"),addMACD(fast=12,slow=26,signal=9,type='EMA',histogram = TRUE),addBBands(n = 20, sd = 2, maType = "SMA", draw = 'bands', on = -1)))
+          
+        })
         
       })
-      
-    })
-  }
+    }
   })
   plotSet2 <- reactive({adjusted[c(bottom_pct_names())]})
   #plotSet2 <- adjusted[c(bottom_pct)]
@@ -226,31 +252,31 @@ server <- function(input, output, session) {
     if(is.null(numberStocks()))
     {return(NULL)}
     max_plots=numberStocks()
-  for (i in 1:max_plots) {
-    # Need local so that each item gets its own number. Without it, the value
-    # of i in the renderPlot() will be the same across all instances, because
-    # of when the expression is evaluated.
-    local({
-      my_i <- i
-      plotname2 <- paste("plot2", my_i, sep="")
-      
-      chartName <- bottom_pct_names()[[i]]
-      
-      #x <- adjusted[[i]][,]
-      x <- plotSet2()[[i]][,c("Date","Open","High","Low","Close","Volume","Adjusted")]
-      
-      output[[plotname2]] <- renderPlot({
+    for (i in 1:max_plots) {
+      # Need local so that each item gets its own number. Without it, the value
+      # of i in the renderPlot() will be the same across all instances, because
+      # of when the expression is evaluated.
+      local({
+        my_i <- i
+        plotname2 <- paste("plot2", my_i, sep="")
         
-        temp <- as.data.table(x)
-        rownames(temp) <- temp$Date
-        temp <- as.xts(temp)
+        chartName <- bottom_pct_names()[[i]]
         
-        quantmod::chartSeries(temp, type="candlestick",subset=NULL,up.col = "black", dn.col = "red", name=chartName, theme = "white",TA=c(addRSI(n=14,maType="EMA"),addMACD(fast=12,slow=26,signal=9,type='EMA',histogram = TRUE),addBBands(n = 20, sd = 2, maType = "SMA", draw = 'bands', on = -1)))
+        #x <- adjusted[[i]][,]
+        x <- plotSet2()[[i]][,c("Date","Open","High","Low","Close","Volume","Adjusted")]
+        
+        output[[plotname2]] <- renderPlot({
+          
+          temp <- as.data.table(x)
+          rownames(temp) <- temp$Date
+          temp <- as.xts(temp)
+          
+          quantmod::chartSeries(temp, type="candlestick",subset=NULL,up.col = "black", dn.col = "red", name=chartName, theme = "white",TA=c(addRSI(n=14,maType="EMA"),addMACD(fast=12,slow=26,signal=9,type='EMA',histogram = TRUE),addBBands(n = 20, sd = 2, maType = "SMA", draw = 'bands', on = -1)))
+          
+        })
         
       })
-      
-    })
-  }
+    }
   })
 }
 
