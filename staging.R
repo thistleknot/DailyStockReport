@@ -143,7 +143,7 @@ if(download)
   
   #observe({(input$symbols)})
   
-  set.seed(10)
+  #set.seed(10)
   sampleSymbols <- sample(symbols, predictionIntervalTestSize)
   
   ptm <- proc.time()
@@ -167,7 +167,7 @@ if(download)
   
   print(paste("estimated length of time for min",desiredSize, ": ",as.integer(sampleSize*timed[3]/predictionIntervalTestSize/60),"minutes",ceiling(((sampleSize*timed[3]/predictionIntervalTestSize/60)-as.integer(sampleSize*timed[3]/predictionIntervalTestSize/60))*60),"seconds"))
   
-  set.seed(10)
+  #set.seed(10)
   sampleSymbols <- sample(nasdaqTraded, sampleSize)
   
   symbolSet <- batch_get_symbols(sampleSymbols,first.date.minus.1week,first.date)
