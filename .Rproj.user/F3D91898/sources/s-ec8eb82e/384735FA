@@ -1,0 +1,22 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1596419767931.000,
+    "dirty" : false,
+    "encoding" : "UTF-8",
+    "folds" : "",
+    "hash" : "2725934236",
+    "id" : "384735FA",
+    "lastKnownWriteTime" : 1596421105,
+    "last_content_update" : 1596421105586,
+    "path" : "~/DailyStockReport/app.R",
+    "project_path" : "app.R",
+    "properties" : {
+        "cursorPosition" : "190,12",
+        "scrollLine" : "174"
+    },
+    "relative_order" : 1,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_source"
+}

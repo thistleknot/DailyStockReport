@@ -1,0 +1,658 @@
+library(forecast)
+library(ppcor)
+library(corrplot)
+
+#combinations
+library(gtools)
+
+#vif
+library(car)
+
+#confusionMatrix
+#library(e1071)
+library(caret)
+
+#optimalCutoff
+library(InformationValue)
+library(OptimalCutpoints)
+
+source("functions.R")
+source("correlationFilter2.R")
+
+library(pbmcapply)
+library(data.table)
+
+tempSet <- sample(yset,40)
+
+#laggable
+
+#testing var
+
+#View(models)
+
+#models <- pbmclapply(yset, function(x)
+models <- pbmclapply(tempSet, function(x)
+{#x=tempSet[1]
+  #x="PRTA"
+  #x=names(listOHCLVStocks)[1]
+  #x="ELY"
+  
+  print(x)
+  
+  y_AR1 = training_superSet_pvt_sub[x]
+  #y = leadSubset
+  
+  #extends beyond train partition
+  
+  leadDates <- as.data.frame(dplyr::lead(training_superSet_pvt_sub[,1], 1))[,,drop=FALSE]
+  colnames(leadDates) <- "Date"
+  
+  startDate <- head(leadDates,1)[,1]
+  
+  numRecordsLeadSubset <- nrow(leadDates)
+  
+  mainStartPosition <- rownames(rowDateNums)[which(rowDateNums$Date==startDate)]
+  mainEndPosition <- as.character(as.double(mainStartPosition) + (numRecordsLeadSubset)-1)
+  mainEndDate <- rowDateNums$Date[which(rownames(rowDateNums)==mainEndPosition)]
+  
+  leadSubset <- c()
+  leadSubset = as.data.frame(subset(superSet_pvt[,x,drop=FALSE], rownames(superSet_pvt) >= startDate & rownames(superSet_pvt) <= mainEndDate))[,,drop=FALSE]
+  
+  leadSubset <- leadSubset - y_AR1
+  
+  leadSubset <- data.frame(unlist(mclapply(leadSubset, function(x) {ifelse(x>0,1,0)})))
+  
+  rownames(leadSubset) <- rownames(y_AR1)
+  
+  colnames(leadSubset) <- paste0(x,"_","F1")
+  
+  y = colnames(leadSubset)
+  
+  TTR_S <- subset(as.data.frame(stock_tech_indicators[colnames(y_AR1)]), rownames(superSet_pvt) >= training_start & rownames(superSet_pvt) <= training_end)
+  
+  #drop adjusted
+  TTR_S <- TTR_S[-7]
+  #drop close
+  TTR_S <- TTR_S[-5]
+  
+  TTR_S <- TTR_S[,colSums(is.na(TTR_S))<nrow(TTR_S)]
+  
+  #TTR_S <- back_step_vif(TTR_S[,-1])
+  
+  TTR_Set_Names <- colnames(TTR_S[,-1])
+  
+  #get lagged endDate
+  
+  #yIndicators <- subset(, rownames(data.frame(stock_tech_indicators[x])) > as.Date(unlist(head(rowDateNums,1))) & as.Date(rownames(data.frame(stock_tech_indicators[x]))) <= as.Date(unlist(tail(rowDateNums,1))))
+  
+  yholder <- training_superSet_pvt_sub[,x,drop=FALSE]
+  
+  colnames(yholder) <- x
+  
+  #lag subsample so we can get last date
+  
+  indice_names <- colnames(superSet_pvt[2:which(colnames(superSet_pvt)==".SP500TR")])
+  
+  #includes SP500  
+  indices_list <- mclapply(indice_names, function(name){
+    data.frame(training_superSet_pvt_sub[,name])
+  }) %>% setNames(indice_names)
+  
+  indices_ <- do.call(cbind, indices_list)
+  
+  colnames(indices_) <- indice_names
+  rownames(indices_) <- rownames(training_superSet_pvt_sub)
+  
+  #oddly including date without -1
+  indices_ <- cbind(leadSubset,indices_)[,-1]
+  #indices_significant <- back_step_partial_correlation(indices_)
+  
+  #indices_significant_names <- colnames(indices_significant[,-1])
+  #print(indices_significant_names)
+  
+  lag_set <- data.frame(ccfReport[x])
+  names(lag_set) <- c("Symbol", "Corr", "Lag")
+  
+  #I'm okay with accepting what is more than -1 (a lead of 1)
+  lessEq2 <- lag_set[,3] >= -1
+  #print(lag_set[lessEq2,])
+  
+  #start building dataSets
+  
+  x2=lag_set[lessEq2,]
+  nrow(x2)
+  
+  x2
+  
+  #testing var
+  
+  #View(x2)
+  lags <- mclapply(1:nrow(x2), function(x3)
+  {#x3=28
+    #print(x3)
+    #print(x3)
+    rowValuesOfx2 <- x2[x3,]
+    name <- rowValuesOfx2[,1]
+    lag <- rowValuesOfx2[,3]
+    data <- c()
+    #based on ccfreport.R
+    if(lag > 0)
+    {
+      data <- data.frame(dplyr::lag(training_superSet_pvt_sub[,name], lag))
+      
+      #lag subsample so we can get last date
+      laggedSubset <- data.frame(dplyr::lag(training_superSet_pvt_sub[,1], lag))[,,drop=FALSE]
+      colnames(laggedSubset) <- "Date"
+      
+      #get lagged endDate
+      endDate <- tail(laggedSubset,1)[,1]
+      
+      numRecordsLaggedSubset <- nrow(laggedSubset)
+      
+      mainEndPosition <- rownames(rowDateNums)[which(rowDateNums$Date==endDate)]
+      mainStartPosition <- as.character(as.double(mainEndPosition) - (numRecordsLaggedSubset))
+      mainStartDate <- rowDateNums$Date[which(rownames(rowDateNums)==mainStartPosition)]
+      
+      laggedSubset <- subset(superSet_pvt[,name,drop=FALSE], rownames(superSet_pvt) > mainStartDate & rownames(superSet_pvt) <= endDate)
+      #laggedIndicators <- subset(as.data.table(stock_tech_indicators[name]), rownames(as.data.table(stock_tech_indicators[name])) > mainStartDate & rownames(as.data.table(stock_tech_indicators[name])) <= endDate)
+      colnames(laggedSubset) <- paste0(name,"_",lag)
+      rownames(laggedSubset) <- rownames(yholder)
+      #laggedSubset <- cbind(laggedSubset,laggedIndicators)
+    }
+    
+    #if anything less than 0, return current t
+    #note: I'm predicting lead(y,1), so a value of 0 means set in the future
+    if(lag <= 0)
+    {
+      laggedSubset <- data.frame(training_superSet_pvt_sub[,name])
+      colnames(laggedSubset) <- paste0(name,"_","0")
+      #laggedIndicators <- subset(as.data.table(stock_tech_indicators[name]), rownames(as.data.table(stock_tech_indicators[name])) > head(rownames(rowDateNums),1) & rownames(as.data.table(stock_tech_indicators[name])) <= tail(rownames(rowDateNums),1))
+      #laggedSubset <- cbind(laggedSubset,laggedIndicators)
+    }
+    #poor name considering not all are lagged, but it's this for consistency
+    return(list(laggedSubset,name,lag))
+  }) #%>% setNames(x2[,1])
+  
+  factor_lags <- do.call(cbind, mclapply(lags, `[[`, 1))
+  
+  factor_lag_names <- do.call(cbind, mclapply(lags, `[[`, 2))
+  factor_lag_lags <- do.call(cbind, mclapply(lags, `[[`, 3))
+  reconstructLags <- list(names(factor_lags),factor_lag_names,factor_lag_lags)
+  
+  names(lags) <- colnames(factor_lags)
+    
+  #partial correlation backwards step
+    
+  data <- cbind(leadSubset,factor_lags)
+  
+  data_modified <- cbind(tail(data[1],-1),data.frame(do.call(cbind,mclapply(data[-1],function(x){diff(x,1)}))))
+  
+  #colnames(factor_lags)
+  
+  #factor_lags_significant_df <- back_step_partial_correlation_inner(data)
+  #factor_lags_significant_df <- back_step_vif(data)
+  #ones <- data_modified[data_modified[,1]==1,]
+  #zeros <- data_modified[data_modified[,1]==0,]
+  
+    #source("vars.r")
+    #rebalanced <- rbind(ones[sample(nrow(ones), nrow(data_modified),replace=TRUE),],zeros[sample(nrow(zeros), nrow(data_modified),replace=TRUE),])
+  
+    #rebalanced <- rebalanced[sample(1:nrow(rebalanced),nrow(data)*2,replace=FALSE),]
+    #rebalanced <- rebalanced[sample(1:nrow(rebalanced),nrow(data_modified)/2,replace=FALSE),]
+  
+    factor_lags_significant_df_vif <- c()
+    #factor_lags_significant_df_vif <- colnames(data_modified[colnames(back_step_vif_binomial(rebalanced))])[-1]
+    #column_names <- MAPE_backstep(rebalanced)
+    #factor_lags_significant_df <- data[unlist(column_names[2])]
+    
+    column_names <- unique(c(factor_lags_significant_df_vif,correlationFilter(data_modified)))
+    
+  #back to regular data
+  factor_lags_significant_df <- cbind(data[1],data[unlist(column_names)])
+  
+  factor_lag_names_significant <- colnames(factor_lags_significant_df[-1])
+
+  #not PC anymore
+  PC_lag_names <- mclapply(lags[factor_lag_names_significant], `[[`, 2)
+  PC_lag_lags <- mclapply(lags[factor_lag_names_significant], `[[`, 3)
+  
+  reconstructPCLags <- list(names(PC_lag_names),PC_lag_names,PC_lag_lags)
+  #end partial correlation backstep
+  
+  #combinedwIndices <- indices_
+  combinedwIndices <- factor_lags_significant_df[,-1]
+  
+  #yields
+  
+  #remove NA columns
+  combinedwIndices <- combinedwIndices[,colSums(is.na(combinedwIndices))<nrow(combinedwIndices)]
+  colnames(combinedwIndices)
+  
+  #normalize for PCA, not for Multiple Regression
+  #combinedwIndices <- CalculateReturns(combinedwIndices)
+  
+  #combinedwIndices <- combinedwIndices[-1,]
+  
+  #This should be validation
+  #folds=rep(1:numFolds, (nrow(combinedwIndices)/numFolds))
+  
+  #y=head(colnames(combinedwIndices),1)
+  
+  #print(y)
+  
+  #combinedwIndices <- cbind(leadSubset,y_AR1,combinedwIndices)
+  combinedwIndices <- cbind(leadSubset,combinedwIndices)
+  
+  #y=colnames(combinedwIndices[1])
+  
+  combinationSet <- c()
+  
+  #minimum of 2 combinations
+  #for (comboSize in 1:length(colnames(set)))
+  #up to 2 interactions
+  
+  comboSize=2
+  #y_AR1 <- colnames(combinedwIndices[24])
+  #already has y
+  #includes lagged predictors
+  #non interaction TTR's are before 24
+  #include y, but not lead y
+  #indiceSetNames <- c(colnames(combinedwIndices[,3:length(colnames(combinedwIndices))]))
+  
+  #don't make combinations of y
+  factorCombinations <- combinations(length(factor_lag_names_significant), 2, factor_lag_names_significant, repeats.allowed = FALSE)
+  
+  #VIF collinearity checks reduces data by 99%+
+  significantFactorPairs <- na.omit.list(mclapply(1:nrow(factorCombinations), function(x)
+  {#x=1
+    print(x)
+    
+    instance=factorCombinations[x,]
+    #print(instance)
+    column_name <- paste(instance,collapse="_X_")
+    #print(column_name)
+    
+    corrInstance1Y <- cor.test(unlist(combinedwIndices[instance[1]]),unlist(combinedwIndices[y]))
+    
+    corrInstance2Y <- cor.test(unlist(combinedwIndices[instance[2]]),unlist(combinedwIndices[y]))
+    
+    #corrPairWise <- cor.test(unlist(combinedwIndices[instance[1]]),unlist(combinedwIndices[instance[1]]))
+    
+    multiplied <- data.frame(combinedwIndices[instance[1]]*combinedwIndices[instance[2]])
+    
+    #source("pairPartialCorr.R")
+    
+    colnames(multiplied) <- column_name
+    
+    corrMultiY <- cor.test(unlist(combinedwIndices[y]),unlist(multiplied))
+    
+    #partial correlation is done using glm and not lm?  Doesn't matter
+    #yX1X2 <- glm(cbind(combinedwIndices[y],combinedwIndices[instance[1]],combinedwIndices[instance[2]]), family="binomial")
+    yX1X2 <- glm(cbind(combinedwIndices[y],combinedwIndices[instance[1]],combinedwIndices[instance[2]]),family=binomial)
+    
+    intX1X2 <- lm(cbind(multiplied,combinedwIndices[instance[1]],combinedwIndices[instance[2]]))
+    
+    partial_cor <- cor.test(yX1X2$residuals,intX1X2$residuals)
+    
+    #aliased when one variable is all the same
+    #don't use glm here because prior model is not
+    # no need to rebalance here
+    collinearity_diagnostic_model <- glm(cbind(combinedwIndices[y],combinedwIndices[instance[1]],combinedwIndices[instance[2]],multiplied),family=binomial)
+    if(any(is.na(collinearity_diagnostic_model$coefficients)))
+    {
+      return(NA)
+    }
+    
+    model_vifs <- vif(collinearity_diagnostic_model)
+    
+    if("Inf" %in% as.character(model_vifs))
+    {
+      return(NA)
+    }
+    
+    if("NaN" %in% as.character(model_vifs))
+    {
+      return(NA)
+    }
+    
+    if(model_vifs[3]==max(model_vifs) && model_vifs[3] > 10)
+    {
+      #if multiplied VIF is highest, drop
+      return(NA)
+    }
+    
+    #if correlation of multiple is less than correlation with x1 is to y & x2 is to y then drop
+    #questionable if needed
+    #if(corrMultiY$estimate<corrInstance1Y$estimate & corrMultiY$estimate<corrInstance2Y$estimate)
+    {
+      #exclude
+      #return(NA)
+    }
+    
+    #if(corrMultiY$estimate > corrInstance1Y$estimate | corrMultiY$estimate > corrInstance2Y$estimate)
+    #if(partial_cor$p.value < .05)
+    {
+      #include (has to be above at least one, not inbetween)
+      
+      #significance <- cor.test(unlist(combinedwIndices[y]),unlist(multiplied))
+      
+      #partial_cor$p.value
+      
+      #cor.test(unlist(combinedwIndices[y]),unlist(multiplied))
+      
+      #& significant
+      #don't want to do this if with partial correlation
+      #if(as.double(significance$p.value)<.05)
+      {
+        #return interaction, significance, and pairlist
+        names(instance) <- colnames(multiplied)
+        #return(list(multiplied,as.double(significance$p.value),instance,colnames(multiplied)))
+        return(list(multiplied,instance,colnames(multiplied)))
+      }
+    }
+    
+    #names(instance) <- colnames(multiplied)
+    #return(list(multiplied,instance,colnames(multiplied)))
+  }))
+  print(length(significantFactorPairs))
+
+  significant_combo_pair_names <- mclapply(significantFactorPairs, `[[`, 2)
+  names(significant_combo_pair_names) <- mclapply(significantFactorPairs, `[[`, 3)
+  
+  #View(significantFactorPairs)
+  
+  #View(significantFactorPairs)
+  
+  #need at least 2
+  if(length(significantFactorPairs)>=2)
+  {
+    significantInteractionPairsDF <- do.call(cbind,mclapply(significantFactorPairs, `[[`, 1))
+    significantInteractionPairsNames <- mclapply(significantFactorPairs, `[[`, 2)
+    #factor_interactions_w_originals <- cbind(combinedwIndices[indiceSetNames],significantFactorPairs)
+    
+    #collinearity_diagnostic_model <- lm(factor_interactions_w_originals)
+    #vif(collinearity_diagnostic_model)
+    
+    #omcdiag(factor_interactions_w_originals[,-1],factor_interactions_w_originals[,1,drop=FALSE])
+    
+    #vif(collinearity_diagnostic_model)
+    #length(colnames(factor_interactions_w_originals))
+    
+    #length(unique(colnames(factor_interactions_w_originals)))
+    
+    #ols_vif_tol(collinearity_diagnostic_model)
+    
+    #combinedwIndices columns of 1st element in list
+    
+    #significantFactorScores <- unlist(mclapply(significantFactorPairs, `[[`, 2))
+    
+    #add y and AR_1
+    
+    #partial correlation begin
+    
+    data <- cbind(leadSubset,significantInteractionPairsDF)
+    
+    data_modified <- cbind(tail(data[1],-1),data.frame(do.call(cbind,mclapply(data[-1],function(x){diff(x,1)}))))
+    #ncol(data)
+    
+    #significantInteractionSet <- back_step_partial_correlation_inner(data)
+    #significantInteractionSet <- back_step_vif(data)
+    
+    #ones <- data_modified[data_modified[,1]==1,]
+    #zeros <- data_modified[data_modified[,1]==0,]
+    
+      #source("vars.r")
+      #rebalanced <- rbind(ones[sample(nrow(ones), nrow(data_modified),replace=TRUE),],zeros[sample(nrow(zeros), nrow(data_modified),replace=TRUE),])
+    
+      #rebalanced <- rebalanced[sample(1:nrow(rebalanced),nrow(data)*2,replace=FALSE),]
+      #rebalanced <- rebalanced[sample(1:nrow(rebalanced),nrow(data_modified)/2,replace=FALSE),]
+      
+      significantInteraction_vif <- c()
+      #significantInteraction_vif <- colnames(back_step_vif_binomial(rebalanced))[-1]
+      
+      #column_names <- MAPE_backstep(rebalanced)
+
+      column_names <- unique(c(significantInteraction_vif,correlationFilter(data_modified)))
+      
+      #back to regular data
+    significantInteractionSet <- cbind(data[1],data[unlist(column_names)])
+    
+    #end partial correlation backstep
+    
+    significantInteractionSetNames <- colnames(significantInteractionSet[,-1])
+    
+    #significantInteractionPairsReducedDF <- cbind(data[1],cbind(y_AR1,data[,-1]))
+    #significantFactorPairs <- cbind(combinedwIndices[y],cbind(combinedwIndices[y_AR1],data[,-1]))
+    
+  }
+  
+  if(!length(significantFactorPairs)>=2)
+  {
+    if(length(significantFactorPairs)==0)
+    {
+      significantInteractionPairsDF=NA
+      significantInteractionPairsNames = NA
+      significantInteractionSet = NA
+      significantInteractionSetNames = NA
+    }
+    if(!length(significantFactorPairs)==0)
+    {
+    significantInteractionPairsDF <- do.call(cbind,mclapply(significantFactorPairs, `[[`, 1))
+    
+    
+    if(length(significantFactorPairs)==1)
+    {
+      significantInteractionPairsNames <- names(significantFactorPairs[[1]][[1]])
+    }
+    if(!length(significantFactorPairs)==1)
+    {
+      significantInteractionPairsNames <- mclapply(significantFactorPairs, `[[`, 2)
+      
+      
+    }
+    significantInteractionSet <- significantInteractionPairsDF[significantInteractionPairsNames]
+    significantInteractionSetNames = colnames(significantInteractionSet)
+    }
+  }
+  
+  #significantInteractionPairNames <- colnames(significantInteractionSetNames)
+  print(significantInteractionSetNames)
+  
+  significant_combo_pair_names[significantInteractionSetNames]
+  
+  #process 1st factors, then TTR_Set
+  list_sets <- c()
+  
+  #combined <- cbind(leadSubset,y_AR1)
+  combined <- cbind(leadSubset)
+  if(length(factor_lag_names_significant)==0)
+  {
+    f_l_n_s=NA
+  }
+  if(!length(factor_lag_names_significant)==0)
+  {
+    f_l_n_s=factor_lag_names_significant
+    #due to BTCUSD=X_11 converted to BTCUSD.X_11 I need to use factor_lags_significant_DF
+    #combined <- cbind(combined,factor_lags[f_l_n_s])
+    combined <- cbind(combined,factor_lags_significant_df[f_l_n_s])
+    #colnames(factor_lags)
+    #colnames(factor_lags_significant_df)
+  }
+  
+  #if(length(indices_significant_names)==0)
+  {
+    #i_s_n=NA
+  }
+  #if(!length(indices_significant_names)==0)
+  {
+    #i_s_n=indices_significant_names
+    #combined <- cbind(combined,indices_[i_s_n])
+  }
+  
+  if(((length(significantInteractionSetNames)==0))|(is.na(significantInteractionSetNames)))
+  {
+    s_i_s_n=NA
+  }
+  if(! (  (length(significantInteractionSetNames)==0)|(is.na(significantInteractionSetNames)) ) )
+    
+  {
+    s_i_s_n=significantInteractionSetNames
+    combined <- cbind(combined,significantInteractionPairsDF[s_i_s_n])
+  }
+  
+  combined <- cbind(combined,TTR_S[TTR_Set_Names])
+  
+  #list_sets <- list(f_l_n_s,s_i_s_n,TTR_Set_Names,i_s_n)
+  list_sets <- list(f_l_n_s,s_i_s_n,unlist(TTR_Set_Names))
+  
+  if((colnames(y_AR1) %in% list_sets | paste0(colnames(y_AR1),"_0") %in% list_sets))
+  {
+    #do nothing
+  }
+  
+  if(!(colnames(y_AR1) %in% list_sets | paste0(colnames(y_AR1),"_0") %in% list_sets))
+  {
+    y_AR1_temp <- y_AR1
+    
+    colnames(y_AR1_temp) <- paste0(colnames(y_AR1),"_0")
+    combined <- cbind(combined[1],y_AR1_temp,combined[-1])
+  }
+  
+  View(list_sets)
+  
+  print(colnames(combined))
+  
+  #drop NA columns
+  combined <- combined[,colSums(is.na(combined))<nrow(combined)]
+  #drop NA rows
+  combined <- na.omit(combined)
+  
+  #thanks bad data RODI
+  #was x (tempset, but since I removed y_AR1)
+  runs <- unlist(rle(combined[,y])$lengths)
+  runs <- runs[which(runs >= 5)]
+  
+  uniques <- length(unique(combined[,y]))
+  if(uniques>=5){uniques=0}
+  
+  runModel=TRUE
+  if((sum(runs[runs>5])+uniques)>=nrow(combined)) {runModel=FALSE}
+  
+  outcome <- colnames(combined[,1])
+  variables <- colnames(combined[,-1])
+  #https://stackoverflow.com/questions/29555473/creating-formula-using-very-long-strings-in-r
+  f <- as.formula(
+    paste(outcome, 
+          paste(sprintf("`%s`", variables)
+                , collapse = " + "), 
+          sep = " ~ "))
+  
+  if(runModel==TRUE)
+  {
+    #error about NA's, but couldn't find any
+    #https://stackoverflow.com/questions/43677853/error-in-lm-fitx-y-offset-offset-singular-ok-0-non-na-cases-with-boxcox
+  
+    ones <- combined[combined[,1]==1,]
+    zeros <- combined[combined[,1]==0,]
+    
+      rebalanced <- rbind(ones[sample(nrow(ones), nrow(combined),replace=TRUE),],zeros[sample(nrow(zeros), nrow(combined),replace=TRUE),])
+    
+      rebalanced <- rebalanced[sample(1:nrow(rebalanced),nrow(combined)*2,replace=FALSE),]
+    
+    model <- glm(rebalanced,family="binomial",control = list(maxit = ncol(rebalanced)))
+    
+    #levels(as.factor(ifelse(model$fitted.values > 0.5, 1, 0)))
+    #levels(as.factor(unlist(leadSubset)))
+    
+    optimal <- InformationValue::optimalCutoff(model$model[1], model$fitted.values, optimiseFor = "misclasserror", returnDiagnostics = FALSE)
+    #optimal.cutpoints(leadSubset, model$fitted.values,methods="MaxSp")
+    #accuracy <- confusionMatrix(as.factor(unlist(ifelse(model$fitted.values > optimal, 1, 0))), as.factor(unlist(leadSubset)))
+    
+    predictions <- predict(model, combined[,-1], type = "response")
+    
+      #fit <- as.factor(as.integer(as.character(ifelse(model$fitted.values>optimal,1,0))))
+      fit <- as.factor(as.integer(as.character(ifelse(predictions>optimal,1,0))))
+      act <- as.factor(as.integer(as.character(unlist( combined[1]))))
+      
+      accuracy <- caret::confusionMatrix(fit,act)
+    
+    #both  
+    MAPE <- 1-accuracy$overall["Accuracy"]
+    
+    #sensitivity  
+    #MAPE <- 1-accuracy$byClass[1]
+    
+    #MAPE <- mean(unlist((na.omit(abs((model$fitted.values - leadSubset)/leadSubset)))))
+    
+    res_IQR <- as.double(quantile(model$residuals,.75)-quantile(model$residuals,.25))
+    price_IQR <- as.double(quantile(unlist(yholder),.75)-quantile(unlist(yholder),.25))
+    deltaY_F <- yholder - leadSubset
+    deltaY_F_IQR <- as.double(quantile(unlist(deltaY_F),.75)-quantile(unlist(deltaY_F),.25))
+    
+    #AR1 Model from page 416 to 418 from Data Mining for Business Analytics
+    #doesn't like dates
+    #AR_Model <- arima(model$residuals,order = c(1L, 0L, 0L))
+    #MA_Model <- arima(model$residuals,order = c(0L, 0L, 1L))
+    #AR_MA_Model <- arima(model$residuals,order = c(1L, 0L, 1L))
+    
+    #predicted2 <- forecast(ARModel)
+    #predicted_AR <- AR_Model$coef[1] + AR_Model$coef[2] *  (model$residuals- AR_Model$coef[2]) + model$fitted.values
+    #predicted_MA <- MA_Model$coef[1] + MA_Model$coef[2] *  (model$residuals- MA_Model$coef[2]) + model$fitted.values
+    #predicted_AR_MA <- AR_MA_Model$coef[1] + AR_MA_Model$coef[2] *  (model$residuals- AR_MA_Model$coef[2]) + AR_MA_Model$coef[3] *  (model$residuals- AR_MA_Model$coef[3]) + model$fitted.values
+    #predicted_AR_MA <- AR_MA_Model$coef[1] + AR_MA_Model$coef[2] *  AR_MA_Model$coef[3] * (model$residuals- AR_MA_Model$coef[2] - AR_MA_Model$coef[3]) + AR_MA_Model$coef[3] *  (model$residuals- AR_MA_Model$coef[3])+ model$fitted.values
+    
+    #MAPE_AR1 <- sum(abs(predicted_AR - unlist(training_superSet_pvt_sub[,x,drop=FALSE]))/training_superSet_pvt_sub[,x,drop=FALSE])/length(predicted_AR)
+    #MAPE_MA1 <- sum(abs(predicted_MA - unlist(training_superSet_pvt_sub[,x,drop=FALSE]))/training_superSet_pvt_sub[,x,drop=FALSE])/length(predicted_MA)
+    #MAPE_MA1_AR1 <- sum(abs(predicted_AR_MA - unlist(training_superSet_pvt_sub[,x,drop=FALSE]))/training_superSet_pvt_sub[,x,drop=FALSE])/length(predicted_AR_MA)
+    
+    #set <- list(model,res_IQR,price_IQR,deltaY_F_IQR,MAPE,predicted_AR,AR_Model,MA_Model,AR_MA_Model,MAPE_AR1,MAPE_MA1,MAPE_MA1_AR1,list_sets,reconstructLags,significant_combo_pair_names[significantInteractionSetNames])
+    set <- list(model,res_IQR,price_IQR,deltaY_F_IQR,MAPE,list_sets,reconstructPCLags,significant_combo_pair_names[significantInteractionSetNames],optimal)
+    
+    #setnames(set) <- c("Model","MAPE")
+    #summary(model)
+  }
+  if(runModel==FALSE)
+  {
+    #set <- list(NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA)
+    set <- list(NA,NA,NA,NA,NA,NA,NA,NA,NA)
+  }
+  
+  #names(set) <- c("model","res_IQR","price_IQR","deltaY_F_IQR","MAPE","AR_Fitted","AR_model","MA_Model","AR_MA_Model","MAPE_AR1","MAPE_MA1","MAPE_MA1_AR1","list_sets","reconstructLags","significant_combo_pair_names[significantInteractionSetNames]")
+  names(set) <- c("model","res_IQR","price_IQR","deltaY_F_IQR","MAPE","list_sets","reconstructPCLags","significant_combo_pair_names[significantInteractionSetNames]","optimal cutoff")
+  return(set)
+  
+}) 
+
+#names(models) <- paste(yset,"F1")
+names(models) <- paste0(tempSet,"_F1")
+
+#View(models[[x]][[1]])
+
+scores <- rbindlist(mclapply(names(models),function (x)
+{#x=names(models)[2]
+  #which(is.na(models["EDZ"]))
+  if(is.na(models[[x]]))
+  {
+    #set <- list(NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA)
+    set <- list(NA,NA,NA,NA,NA,NA,NA,NA,NA)
+    #names(set) <- c("Symbol", "Factors", "Adj R", "res_IQR","price_IQR","deltaY_F_IQR","MAPE","MAPE_AR1","MAPE_MA1","MAPE_MA1_AR1", "Formula")
+    names(set) <- c("Symbol", "Factors", "Adj R", "res_IQR","price_IQR","deltaY_F_IQR","MAPE","Formula","Optimal Cutoff")
+  }
+  if(!(is.na(models[[x]])))
+  {
+    formula <- paste(names(models[[x]]$model$coefficients), collapse=" + ")
+    
+    set <- list(x, ncol(models[[x]]$model$model),summary(models[[x]][[1]])$adj.r.squared,models[[x]][[2]],models[[x]][[3]],models[[x]][[4]],models[[x]][[5]],formula,models[[x]][[9]])
+    #names(set) <- c("Symbol", "Factors", "Adj R", "res_IQR","price_IQR","deltaY_F_IQR","MAPE","MAPE_AR1","MAPE_MA1","MAPE_MA1_AR1", "Formula")
+    names(set) <- c("Symbol", "Factors", "Adj R", "res_IQR","price_IQR","deltaY_F_IQR","MAPE","Formula","Optimal Cutoff")
+  }
+  
+  #print(summary(models[[x]]))
+  
+  return(set)
+}))
+
+View(scores)
+
+hist(scores$`Adj R`)
+hist(scores$MAPE)
