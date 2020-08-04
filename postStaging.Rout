@@ -1,0 +1,216 @@
+
+R version 3.6.3 (2020-02-29) -- "Holding the Windsock"
+Copyright (C) 2020 The R Foundation for Statistical Computing
+Platform: x86_64-pc-linux-gnu (64-bit)
+
+R is free software and comes with ABSOLUTELY NO WARRANTY.
+You are welcome to redistribute it under certain conditions.
+Type 'license()' or 'licence()' for distribution details.
+
+  Natural language support but running in an English locale
+
+R is a collaborative project with many contributors.
+Type 'contributors()' for more information and
+'citation()' on how to cite R or R packages in publications.
+
+Type 'demo()' for some demos, 'help()' for on-line help, or
+'help.start()' for an HTML browser interface to help.
+Type 'q()' to quit R.
+
+[Previously saved workspace restored]
+
+> #loads CSV
+> #creates Pivot
+> #creates trading calendar
+> #interpolates
+> 
+> library(dplyr)
+
+Attaching package: ‘dplyr’
+
+The following objects are masked from ‘package:stats’:
+
+    filter, lag
+
+The following objects are masked from ‘package:base’:
+
+    intersect, setdiff, setequal, union
+
+> library(reshape2)
+> library(imputeTS)
+Registered S3 method overwritten by 'quantmod':
+  method            from
+  as.zoo.data.frame zoo 
+> library(PerformanceAnalytics)
+Loading required package: xts
+Loading required package: zoo
+
+Attaching package: ‘zoo’
+
+The following object is masked from ‘package:imputeTS’:
+
+    na.locf
+
+The following objects are masked from ‘package:base’:
+
+    as.Date, as.Date.numeric
+
+
+Attaching package: ‘xts’
+
+The following objects are masked from ‘package:dplyr’:
+
+    first, last
+
+
+Attaching package: ‘PerformanceAnalytics’
+
+The following object is masked from ‘package:graphics’:
+
+    legend
+
+> library(zoo)
+> 
+> source("staging.R")
+
+Attaching package: ‘lubridate’
+
+The following objects are masked from ‘package:dplyr’:
+
+    intersect, setdiff, union
+
+The following objects are masked from ‘package:base’:
+
+    date, intersect, setdiff, union
+
+Loading required package: lme4
+Loading required package: Matrix
+Loading required package: coda
+Loading required package: quantmod
+Loading required package: TTR
+Version 0.4-0 included new data defaults. See ?getSymbols.
+══ Need to Learn tidyquant? ════════════════════════════════════════════════════
+Business Science offers a 1-hour course - Learning Lab #9: Performance Analysis & Portfolio Optimization with tidyquant!
+</> Learn more at: https://university.business-science.io/p/learning-labs-pro </>
+
+Attaching package: ‘data.table’
+
+The following objects are masked from ‘package:lubridate’:
+
+    hour, isoweek, mday, minute, month, quarter, second, wday, week,
+    yday, year
+
+The following objects are masked from ‘package:xts’:
+
+    first, last
+
+The following objects are masked from ‘package:reshape2’:
+
+    dcast, melt
+
+The following objects are masked from ‘package:dplyr’:
+
+    between, first, last
+
+trying URL 'ftp://ftp.nasdaqtrader.com/SymbolDirectory/nasdaqtraded.txt'
+Content type 'unknown' length 704074 bytes (687 KB)
+==================================================
+trying URL 'ftp://ftp.nasdaqtrader.com/SymbolDirectory/mfundslist.txt'
+Content type 'unknown' length 3842656 bytes (3.7 MB)
+==================================================
+   user  system elapsed 
+  3.432   0.645  21.763 
+[1] 0.88
+[1] "estimated length of time for min 400 :  3 minutes 51 seconds"
+   user  system elapsed 
+ 65.941   9.161  95.331 
+   user  system elapsed 
+  0.455   0.264   4.712 
+[1] "staging complete"
+Warning messages:
+1: ‘timeDate’ namespace cannot be unloaded:
+  namespace ‘timeDate’ is imported by ‘forecast’ so cannot be unloaded 
+2: ‘timeDate’ namespace cannot be unloaded:
+  namespace ‘timeDate’ is imported by ‘forecast’ so cannot be unloaded 
+3: ‘timeDate’ namespace cannot be unloaded:
+  namespace ‘timeDate’ is imported by ‘forecast’ so cannot be unloaded 
+> source("TradingDates.R")
+> 
+> colMax <- function(data) sapply(data, max, na.rm = TRUE)
+> 
+> adjustedDF <- read.csv(file="adjustedDF.csv", header=TRUE,colClasses=c('character','Date','numeric','numeric','numeric','numeric','numeric','numeric'))
+> 
+> trading_dates <- read.csv(file="trading_dates.csv", header=TRUE,colClasses=c('Date'))
+> 
+> adjusted_pvt <- reshape2::dcast(adjustedDF, Date ~ Symbol,value.var='Adjusted',fun.aggregate = mean, fill=NULL)
+> adjusted_pvt <- merge.data.frame(x=trading_dates[,'Date',drop=F],y=data.frame(adjusted_pvt),by='Date',all.x=T)
+> adjusted_pvt <- na_interpolation(adjusted_pvt,options=LINEAR)
+> 
+> adjusted <- group_split(adjustedDF %>% group_by(Symbol))
+> 
+> #group_keys(adjustedDF %>% group_by(Symbol))
+> names(adjusted) <- colnames(adjusted_pvt[-1])
+> 
+> #remove columns with NA's
+> adjusted_pvt <- adjusted_pvt[,colSums(is.na(adjusted_pvt))<nrow(adjusted_pvt)]
+> 
+> #filter out bad daily returns (over 500%)
+> 
+> rownames(adjusted_pvt) <- adjusted_pvt$Date
+> #uniques <- length(unique(combined[,y]))
+> #if(uniques>=5){uniques=0}
+> 
+> adjusted_pvt_returns <- CalculateReturns(adjusted_pvt[,2:ncol(adjusted_pvt)], method="discrete")
+> rownames(adjusted_pvt_returns) <- adjusted_pvt$Date
+> adjusted_pvt_returns <- tail(adjusted_pvt_returns,-1)
+> 
+> max_daily_ret <- colMax(adjusted_pvt_returns)
+> 
+> adjusted_pvt_returns <- adjusted_pvt_returns[names(adjusted_pvt_returns)[which(max_daily_ret<=5)]]
+> adjusted_pvt <- adjusted_pvt[colnames(adjusted_pvt_returns)]
+> adjusted <- adjusted[colnames(adjusted_pvt_returns)]
+> 
+> totalReturns <- Return.cumulative(adjusted_pvt_returns)
+> median(totalReturns)
+[1] -0.06146752
+> hist(totalReturns)
+> 
+> #filter  by excessive total returns
+> 
+> outliers <- totalReturns[,which(totalReturns>15),drop=FALSE]
+> 
+> print(c(("outlier's"),paste(colnames(outliers),outliers)))
+[1] "outlier's"
+> totalReturns <- totalReturns[,which(totalReturns<=15),drop=FALSE]
+> 
+> adjusted_pvt_returns <- adjusted_pvt_returns[,colnames(totalReturns)]
+> adjusted_pvt <- adjusted_pvt[colnames(adjusted_pvt_returns)]
+> adjusted <- adjusted[colnames(adjusted_pvt_returns)]
+> 
+> bottomTop10pct <- quantile(totalReturns,probs=c(.025,.975))
+> print(bottomTop10pct)
+      2.5%      97.5% 
+-0.9233006  1.4150508 
+> bottom_pct <- totalReturns[,which(totalReturns<=bottomTop10pct[1])]
+> top_pct <- totalReturns[,which(totalReturns>=bottomTop10pct[2])]
+> 
+> fwrite(file="top_pct.csv",list(names(top_pct)))
+> fwrite(file="bottom_pct.csv",list(names(bottom_pct)))
+> #fwrite(file="adjusted_pvt_returns.csv",adjusted_pvt_returns)
+> #https://stackoverflow.com/questions/20748721/write-xts-zoo-object-to-csv-with-index
+> #write.zoo(adjusted_pvt_returns,file="adjusted_pvt_returns.csv", index.name = "Date", row.names=TRUE)
+> saveRDS(adjusted_pvt_returns, file= 'adjusted_pvt_returns.RData')
+> saveRDS(adjusted, file= 'adjusted.RData')
+> fwrite(file="outliers.csv",outliers)
+x being coerced from class: matrix to data.table
+Warning message:
+In fwrite(file = "outliers.csv", outliers) :
+  Input has no columns; doing nothing.
+If you intended to overwrite the file at outliers.csv with an empty one, please use file.remove first.
+> fwrite(file="totalReturns.csv",totalReturns)
+x being coerced from class: matrix to data.table
+> saveRDS(adjusted_pvt,file='adjusted_pvt.RData')
+> 
+> proc.time()
+   user  system elapsed 
+161.582  26.202 321.759 
