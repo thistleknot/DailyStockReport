@@ -271,7 +271,7 @@ server <- function(input, output, session) {
           rownames(temp) <- temp$Date
           temp <- as.xts(temp)
           
-          quantmod::chartSeries(temp, type="candlestick",subset=NULL,up.col = "black", dn.col = "red", name=chartName, theme = "white",TA=c(addRSI(n=14,maType="EMA"),addMACD(fast=12,slow=26,signal=9,type='EMA',histogram = TRUE),addBBands(n = 20, sd = 2, maType = "SMA", draw = 'bands', on = -1)))
+          quantmod::chartSeries(temp, type="candlestick",subset=NULL,up.col = "black", dn.col = "red", name= chartName, theme = "white",TA=c(addRSI(n=14,maType="EMA"),addMACD(fast=12,slow=26,signal=9,type='EMA',histogram = TRUE),addBBands(n = 20, sd = 2, maType = "SMA", draw = 'bands', on = -1), addEMA(n = 5, wilder = FALSE, ratio=NULL, on = 1, with.col = Cl, overlay = TRUE, col = "blue"),addEMA(n = 20, wilder = FALSE, ratio=NULL, on = 1, with.col = Cl, overlay = TRUE, col = "green"),addEMA(n = 50, on = 1, with.col = Cl, overlay = TRUE, col = "brown"),addEMA(n = 200, on = 1, with.col = Cl, overlay = TRUE, col = "pink")))
           
         })
         
