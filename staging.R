@@ -202,7 +202,7 @@ if(download)
   #drop NA rows
   symbolSet <- symbolSet[!is.na(symbolSet)]
   #drop NA columns
-  symbolSet <- symbolSet[,colSums(is.na(symbolSet))<nrow(symbolSet)]
+  symbolSet <- symbolSet[,colSums(is.na(symbolSet))<nrow(symbolSet)*threshold]
   length(symbolSet)
   
   symbolSet <- mclapply(symbolSet, setNames, c("Symbol","Date","Open","High","Low","Close","Volume","Adjusted"))
