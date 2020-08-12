@@ -32,7 +32,8 @@ batch_get_symbols <- function(data,first.date,last.date) {
   
   set <- mclapply(data, function (x)
   {
-    data <- tq_get(x, from = first.date, to=last.date)
+    #na's getting through.
+    data <- na.omit(tq_get(x, from = first.date, to=last.date))
     
       if(nrow(data.frame(data))==1)
       {
@@ -143,7 +144,7 @@ if(download)
   
   #observe({(input$symbols)})
   
-  #set.seed(10)
+  #set.seed(as.integer(day(Sys.Date())))
   sampleSymbols <- sample(symbols, predictionIntervalTestSize)
   
   ptm <- proc.time()
@@ -202,7 +203,18 @@ if(download)
   #drop NA rows
   symbolSet <- symbolSet[!is.na(symbolSet)]
   #drop NA columns
-  symbolSet <- symbolSet[,colSums(is.na(symbolSet))<nrow(symbolSet)*threshold]
+  
+  symbolSet <- mclapply(symbolSet, function (x)
+    {
+    s=data.frame(x)[,1,drop=FALSE]
+    if(colSums(is.na(s))<nrow(s)*threshold)
+    {
+      return(x)
+    }
+    else
+    {return(NA)}
+  })
+  symbolSet <- symbolSet[!is.na(symbolSet)]
   length(symbolSet)
   
   symbolSet <- mclapply(symbolSet, setNames, c("Symbol","Date","Open","High","Low","Close","Volume","Adjusted"))
