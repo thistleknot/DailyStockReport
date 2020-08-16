@@ -180,7 +180,7 @@ if(download)
   #full quarters
   ptm <- proc.time()
   
-  sampleSymbols <- c(names(symbolSet),indexes)
+  sampleSymbols <- c(indexes,names(symbolSet))
   symbolSet <- batch_get_symbols(sampleSymbols,first.date,last.date)
   
   timed <- proc.time() - ptm

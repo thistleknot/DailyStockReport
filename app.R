@@ -7,6 +7,7 @@ library(parallel)
 library(HelpersMG)
 library(tidyquant)
 library(data.table)
+library(shiny)
 
 adjusted_pvt_returns <- readRDS(file= 'adjusted_pvt_returns.RData')
 adjusted <- readRDS(file= 'adjusted.RData')
