@@ -25,7 +25,8 @@ adjusted_pvt <- na_interpolation(adjusted_pvt,options=LINEAR)
 adjusted <- group_split(adjustedDF %>% group_by(Symbol))
 
 #group_keys(adjustedDF %>% group_by(Symbol))
-names(adjusted) <- colnames(adjusted_pvt[-1])
+names(adjusted) <- colnames(adjusted_pvt[which(colnames(adjusted_pvt)!="X.SP500TR")])
+
 
 #remove columns with NA's
 adjusted_pvt <- adjusted_pvt[,colSums(is.na(adjusted_pvt))<nrow(adjusted_pvt)]
