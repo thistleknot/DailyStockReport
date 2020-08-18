@@ -25,8 +25,8 @@ adjusted_pvt <- na_interpolation(adjusted_pvt,options=LINEAR)
 adjusted <- group_split(adjustedDF %>% group_by(Symbol))
 
 #group_keys(adjustedDF %>% group_by(Symbol))
-names(adjusted) <- colnames(adjusted_pvt[which(colnames(adjusted_pvt)!="X.SP500TR")])
-
+#skip date
+names(adjusted) <- colnames(adjusted_pvt[-1])
 
 #remove columns with NA's
 adjusted_pvt <- adjusted_pvt[,colSums(is.na(adjusted_pvt))<nrow(adjusted_pvt)]
@@ -74,6 +74,7 @@ fwrite(file="bottom_pct.csv",list(names(bottom_pct)))
 #write.zoo(adjusted_pvt_returns,file="adjusted_pvt_returns.csv", index.name = "Date", row.names=TRUE)
 saveRDS(adjusted_pvt_returns, file= 'adjusted_pvt_returns.RData')
 saveRDS(adjusted, file= 'adjusted.RData')
+file.remove(file="outliers.csv")
 fwrite(file="outliers.csv",outliers)
 fwrite(file="totalReturns.csv",totalReturns)
 saveRDS(adjusted_pvt,file='adjusted_pvt.RData')
