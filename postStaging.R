@@ -31,6 +31,13 @@ names(adjusted) <- colnames(adjusted_pvt[-1])
 #remove columns with NA's
 adjusted_pvt <- adjusted_pvt[,colSums(is.na(adjusted_pvt))<nrow(adjusted_pvt)]
 
+#filter out values repeated >= 5 times
+repeats <- apply(adjusted_pvt, 2, function(x) max(rle(x)$lengths))
+
+repeats <- names(repeats[which(repeats >= 5)])
+
+adjusted_pvt <- adjusted_pvt[-which(colnames(adjusted_pvt) %in% repeats)]
+
 #filter out bad daily returns (over 500%)
 
 rownames(adjusted_pvt) <- adjusted_pvt$Date
@@ -68,13 +75,14 @@ bottom_pct <- totalReturns[,which(totalReturns<=bottomTop10pct[1])]
 top_pct <- totalReturns[,which(totalReturns>=bottomTop10pct[2])]
 
 fwrite(file="top_pct.csv",list(names(top_pct)))
+file.remove(file="outliers.csv")
 fwrite(file="bottom_pct.csv",list(names(bottom_pct)))
 #fwrite(file="adjusted_pvt_returns.csv",adjusted_pvt_returns)
 #https://stackoverflow.com/questions/20748721/write-xts-zoo-object-to-csv-with-index
 #write.zoo(adjusted_pvt_returns,file="adjusted_pvt_returns.csv", index.name = "Date", row.names=TRUE)
 saveRDS(adjusted_pvt_returns, file= 'adjusted_pvt_returns.RData')
 saveRDS(adjusted, file= 'adjusted.RData')
-file.remove(file="outliers.csv")
 fwrite(file="outliers.csv",outliers)
 fwrite(file="totalReturns.csv",totalReturns)
+fwrite(file="adjustedDF.csv",adjustedDF)
 saveRDS(adjusted_pvt,file='adjusted_pvt.RData')
